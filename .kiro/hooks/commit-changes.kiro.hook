@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Commit Changes",
+  "description": "Manually triggered hook that stages all changes, generates a conventional commit message based on the diff, and commits.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the current git diff (staged and unstaged) in the repository. Stage all modified and new files with `git add -A`, then create a single commit with a proper conventional commit message. The commit message should follow this format: `type(scope): short summary` where type is feat/fix/docs/refactor/chore and scope is the affected area. Add a body if the changes are substantial. Do NOT push — only commit locally."
+  }
+}

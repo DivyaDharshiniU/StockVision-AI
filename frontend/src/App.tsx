@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import Spinner from "@cloudscape-design/components/spinner";
 import Alert from "@cloudscape-design/components/alert";
+import Tabs from "@cloudscape-design/components/tabs";
 import { ScanResult } from "./types";
 import ScanHeader from "./components/ScanHeader";
 import PicksTable from "./components/PicksTable";
+import BacktestPage from "./components/BacktestPage";
 
-export default function App() {
+function ScanView() {
   const [data, setData] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const base = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -28,5 +30,16 @@ export default function App() {
       <ScanHeader timestamp={data.scan_timestamp} />
       <PicksTable picks={data.picks} />
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <Tabs
+      tabs={[
+        { id: "scan", label: "Live Scan", content: <ScanView /> },
+        { id: "backtest", label: "Backtest", content: <BacktestPage /> },
+      ]}
+    />
   );
 }

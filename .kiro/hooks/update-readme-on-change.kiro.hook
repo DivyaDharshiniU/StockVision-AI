@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Update README on Code Change",
+  "description": "When a Python or TypeScript/JavaScript source file is edited (by user, agent, or subagent), or after a task completes, the agent reviews recent changes and updates the README.md to reflect any new or modified functionality, setup steps, or API endpoints.",
+  "version": "2",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.py",
+      "*.ts",
+      "*.tsx",
+      "*.js",
+      "*.jsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source code file was just edited (possibly by a subagent or task execution). Review the change and determine if the README.md needs updating. If the change introduces new features, modifies API endpoints, changes setup/run instructions, or alters project structure, update README.md accordingly. Keep the README concise and accurate. If the change is minor (e.g., refactoring internals, fixing typos in code) and doesn't affect user-facing documentation, do nothing."
+  }
+}

@@ -16,6 +16,7 @@
 - [Overview](#overview)
 - [System Architecture](#system-architecture)
 - [Scoring Model](#scoring-model)
+- [Backtest Evaluation](#backtest-evaluation)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
@@ -110,6 +111,33 @@ Stocks are excluded from scoring if:
 
 ---
 
+## Backtest Evaluation
+
+The **Backtest** tab lets you validate the scoring model against history. Select a past date, and the system:
+
+1. Scores all Nifty 100 stocks using only data available as of that date
+2. Identifies the top 10 bullish picks (same model as live scan)
+3. Computes actual forward returns at **5, 10, and 20 trading days** after the backtest date
+4. Compares pick returns against the **Nifty index benchmark**
+5. Calculates **Precision** (% of picks that went up) and **Recall** (% of all rising stocks captured by picks)
+
+### API
+
+```
+GET /api/backtest?date=2025-01-15
+```
+
+Returns the top 10 picks with forward returns, benchmark returns, and precision/recall metrics.
+
+### Frontend
+
+Switch to the **Backtest** tab → pick a date → click **Run Backtest**. Results include:
+- A **Model Accuracy** panel with color-coded precision/recall for each window
+- A **results table** showing each pick's actual 5d/10d/20d returns
+- A **bar chart** comparing average pick returns vs the Nifty benchmark
+
+---
+
 ## Tech Stack
 
 ### Backend
@@ -144,9 +172,13 @@ StockVision-AI/
 │   ├── universe.py         # NIFTY_100 symbol list + company name map
 │   ├── indicators.py       # Pure: compute_indicators(symbol, df) → Indicators
 │   ├── scorer.py           # compute_score(ind), rank_stocks(indicators, ...)
-│   ├── data_fetcher.py     # async fetch_ohlcv(symbol, sem) via yfinance
-│   ├── scanner.py          # run_scan() — orchestrates the full pipeline
+│   ├── data_fetcher.py     # async fetch_ohlcv + fetch_ohlcv_range via yfinance
+│   ├── scanner.py          # run_scan() — orchestrates the live scan pipeline
 │   ├── router.py           # GET /api/scan + in-flight deduplication
+│   ├── backtest_engine.py  # run_backtest() — historical scoring + forward returns
+│   ├── backtest_router.py  # GET /api/backtest?date=YYYY-MM-DD
+│   ├── forward_returns.py  # Pure: forward return computation at 5/10/20 days
+│   ├── precision_recall.py # Pure: precision/recall metric computation
 │   └── main.py             # FastAPI app, CORS, router registration
 ├── frontend/
 │   ├── .env                # VITE_API_BASE_URL=http://localhost:8000
@@ -155,15 +187,20 @@ StockVision-AI/
 │   ├── vite.config.ts
 │   └── src/
 │       ├── main.tsx
-│       ├── App.tsx         # Fetch + loading/error/success state
-│       ├── types.ts        # TopPick, ScanResult interfaces
+│       ├── App.tsx         # Tabs: Live Scan + Backtest
+│       ├── types.ts        # TopPick, ScanResult, BacktestResult interfaces
 │       └── components/
-│           ├── ScanHeader.tsx   # Cloudscape Header + IST timestamp
-│           ├── PicksTable.tsx   # Cloudscape Table with sort state
-│           └── Sparkline.tsx    # Recharts 100×40 px sparkline
+│           ├── ScanHeader.tsx        # Cloudscape Header + IST timestamp
+│           ├── PicksTable.tsx        # Cloudscape Table with sort state
+│           ├── Sparkline.tsx         # Recharts 100×40 px sparkline
+│           ├── BacktestPage.tsx      # Date picker + backtest trigger
+│           ├── BacktestTable.tsx     # Picks with forward returns
+│           ├── BacktestChart.tsx     # Bar chart: picks vs benchmark
+│           └── PrecisionRecallPanel.tsx  # Precision/recall metrics display
 ├── tests/
 │   ├── test_indicators.py  # Property-based tests (Hypothesis)
-│   └── test_scorer.py      # Property-based tests (Hypothesis)
+│   ├── test_scorer.py      # Property-based tests (Hypothesis)
+│   └── test_ranking_properties.py  # Property 18: ranking correctness (Hypothesis)
 ├── requirements.txt
 └── README.md
 ```
@@ -320,6 +357,51 @@ Triggers a full Nifty 100 scan and returns ranked picks.
 { "error": "All symbols failed data retrieval" }
 ```
 
+### `GET /api/backtest?date=YYYY-MM-DD`
+
+Runs the scoring model against historical data for a past date, computes forward returns, and returns precision/recall metrics.
+
+**Success — HTTP 200**
+
+```json
+{
+  "backtest_date": "2025-01-15",
+  "total_qualified": 42,
+  "picks": [
+    {
+      "rank": 1,
+      "symbol": "RELIANCE.NS",
+      "company_name": "Reliance Industries",
+      "score": 100,
+      "close": 2450.50,
+      "forward_return_5d": 2.45,
+      "forward_return_10d": 4.12,
+      "forward_return_20d": -1.30
+    }
+  ],
+  "benchmark_returns": {
+    "return_5d": 1.20,
+    "return_10d": 2.05,
+    "return_20d": 0.85
+  },
+  "precision_recall": {
+    "precision_5d": 70.00,
+    "precision_10d": 60.00,
+    "precision_20d": 80.00,
+    "recall_5d": 23.33,
+    "recall_10d": 18.75,
+    "recall_20d": 25.00
+  }
+}
+```
+
+| Status | Condition |
+|---|---|
+| 200 | Successful backtest |
+| 400 | Date is today or in the future |
+| 422 | Invalid date format (not YYYY-MM-DD) |
+| 503 | All symbols failed data retrieval |
+
 ---
 
 ## Configuration
@@ -376,6 +458,7 @@ StockVision AI uses **property-based testing** (PBT) as a first-class correctnes
 | **P5: Score formula and range** | All 8 binary signal combinations yield a score in `{0, 25, 35, 40, 60, 65, 75, 100}` |
 | **P6: Signal threshold conditions** | Each signal bit is 1 iff its threshold condition holds, for any generated `Indicators` |
 | **P7: Top picks are highest-scoring** | Every pick score ≥ every non-pick score; ties ordered by descending `volume_ratio` |
+| **P18: Descending sort with complete preservation** | Output is sorted descending by `(score, volume_ratio)`, stable sort preserves input order for ties, and all input tickers appear in output (no filtering) |
 
 This approach surface bugs that example tests miss — edge cases at exact threshold boundaries, floating-point ordering issues, and empty-list corner cases are all explored automatically.
 

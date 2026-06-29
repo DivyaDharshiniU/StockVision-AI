@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Update README After Task",
+  "description": "After a task execution completes (including subagent-driven spec tasks), reviews all recent code changes and updates README.md to reflect new features, endpoints, or setup changes.",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task just completed (possibly creating or modifying multiple source files via subagents). Review the current project state — check backend/ and frontend/src/ for any new modules, endpoints, or components that aren't documented in README.md. If the README is missing documentation for new features (API endpoints, frontend pages, setup steps, architecture changes), update it. Keep the README concise and well-structured. If nothing user-facing changed, do nothing."
+  }
+}
